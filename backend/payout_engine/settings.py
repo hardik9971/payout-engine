@@ -84,6 +84,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "payouts.tasks.requeue_stuck_payouts",
         "schedule": 60.0,  # every 60 seconds
     },
+    "purge-expired-idempotency-slots": {
+        "task": "payouts.tasks.purge_expired_idempotency_slots",
+        "schedule": 86400.0,  # once per day
+    },
 }
 
 # CORS

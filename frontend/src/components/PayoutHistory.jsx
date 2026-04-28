@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { retryPayout } from "../api";
+
 /**
  * Payout status badge.
  */
@@ -16,10 +19,70 @@ function StatusBadge({ status }) {
 }
 
 /**
+ * RetryButton — operator retry for FAILED payouts.
+ *
+ * Calls POST /api/v1/payouts/<id>/retry/ with X-Operator-Override: true.
+ * Shows inline feedback (success / error) without leaving the table.
+ * Calls onSuccess() after a successful retry so the parent refreshes all data.
+ */
+function RetryButton({ payoutId, onSuccess }) {
+  const [state, setState] = useState("idle"); // "idle" | "loading" | "ok" | "err"
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleRetry = async () => {
+    setState("loading");
+    try {
+      const { data, status } = await retryPayout(payoutId);
+      if (status === 201) {
+        setState("ok");
+        // Give the user a moment to see the tick before the table refreshes
+        setTimeout(() => {
+          onSuccess?.();
+          setState("idle");
+        }, 800);
+      } else {
+        setErrorMsg(data?.error ?? "Retry failed.");
+        setState("err");
+        setTimeout(() => setState("idle"), 3000);
+      }
+    } catch {
+      setErrorMsg("Network error.");
+      setState("err");
+      setTimeout(() => setState("idle"), 3000);
+    }
+  };
+
+  if (state === "ok") {
+    return <span className="text-xs text-emerald-400 font-semibold">✓ Queued</span>;
+  }
+
+  if (state === "err") {
+    return (
+      <span className="text-xs text-red-400" title={errorMsg}>
+        ✗ {errorMsg.length > 24 ? errorMsg.slice(0, 24) + "…" : errorMsg}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={handleRetry}
+      disabled={state === "loading"}
+      className="text-xs px-2.5 py-1 rounded-lg border border-amber-600/50 text-amber-400
+                 hover:bg-amber-600/20 hover:border-amber-500 active:scale-95
+                 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {state === "loading" ? "…" : "Retry"}
+    </button>
+  );
+}
+
+/**
  * PayoutHistory — table of all payout requests with status badges.
+ * FAILED payouts show an operator Retry button that calls /retry/ endpoint.
  * Polls every 3 seconds via parent component.
  */
-export default function PayoutHistory({ payouts }) {
+export default function PayoutHistory({ payouts, onSuccess }) {
   if (!payouts) {
     return (
       <div className="card animate-pulse">
@@ -51,6 +114,7 @@ export default function PayoutHistory({ payouts }) {
                 <th className="pb-2 font-medium">Status</th>
                 <th className="pb-2 font-medium">Retries</th>
                 <th className="pb-2 font-medium">Created</th>
+                <th className="pb-2 font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
@@ -65,6 +129,11 @@ export default function PayoutHistory({ payouts }) {
                   <td className="py-2.5 text-center text-slate-500">{p.retry_count}</td>
                   <td className="py-2.5 text-slate-500 text-xs">
                     {new Date(p.created_at).toLocaleString("en-IN")}
+                  </td>
+                  <td className="py-2.5">
+                    {p.status === "FAILED" && (
+                      <RetryButton payoutId={p.id} onSuccess={onSuccess} />
+                    )}
                   </td>
                 </tr>
               ))}

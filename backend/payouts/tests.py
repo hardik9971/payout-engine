@@ -21,7 +21,7 @@ Tests:
                                 2nd gets 201 from stored response (not a duplicate payout)
   4. StateMachineTest         — assert invalid transitions raise
   5. LedgerIntegrityTest      — assert balance formula is correct across entry types
-  6. ForceFailStateMachineTest — assert _force_fail_payout follows PENDING→PROCESSING→FAILED
+  6. ForceFailStateMachineTest — assert _mark_payout_failed_and_release_hold follows PENDING→PROCESSING→FAILED
 """
 import threading
 import uuid
@@ -32,7 +32,7 @@ from django.db import transaction
 from payouts.models import LedgerEntry, Merchant, Payout, IdempotencyKey
 from payouts.balance import get_balance
 from payouts.state_machine import transition, InvalidTransitionError
-from payouts.tasks import _force_fail_payout
+from payouts.tasks import _mark_payout_failed_and_release_hold
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -295,7 +295,7 @@ class LedgerIntegrityTest(TransactionTestCase):
 
 class ForceFailStateMachineTest(TransactionTestCase):
     """
-    _force_fail_payout must follow the state machine:
+    _mark_payout_failed_and_release_hold must follow the state machine:
       PENDING → PROCESSING → FAILED (two transitions, not a direct jump)
     """
 
@@ -317,7 +317,7 @@ class ForceFailStateMachineTest(TransactionTestCase):
             payout=payout,
         )
 
-        _force_fail_payout(payout.pk)
+        _mark_payout_failed_and_release_hold(payout.pk)
 
         payout.refresh_from_db()
         self.assertEqual(payout.status, Payout.Status.FAILED)
@@ -346,7 +346,7 @@ class ForceFailStateMachineTest(TransactionTestCase):
             payout=payout,
         )
 
-        _force_fail_payout(payout.pk)
+        _mark_payout_failed_and_release_hold(payout.pk)
 
         payout.refresh_from_db()
         self.assertEqual(payout.status, Payout.Status.FAILED)
@@ -361,7 +361,7 @@ class ForceFailStateMachineTest(TransactionTestCase):
             status=Payout.Status.COMPLETED,
         )
 
-        _force_fail_payout(payout.pk)
+        _mark_payout_failed_and_release_hold(payout.pk)
 
         payout.refresh_from_db()
         self.assertEqual(payout.status, Payout.Status.COMPLETED)  # unchanged

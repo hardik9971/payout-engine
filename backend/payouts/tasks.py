@@ -39,7 +39,7 @@ from django.db import OperationalError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-from .models import LedgerEntry, Payout
+from .models import IdempotencyKey, LedgerEntry, Payout
 from .state_machine import InvalidTransitionError, transition
 
 logger = logging.getLogger(__name__)
@@ -243,3 +243,22 @@ def requeue_stuck_payouts() -> dict:
                 re_queued += 1
 
     return {"re_queued": re_queued, "force_failed": force_failed}
+
+
+@shared_task(name="payouts.tasks.purge_expired_idempotency_slots")
+def purge_expired_idempotency_slots() -> dict:
+    """
+    Delete idempotency slots that have passed their expiry timestamp.
+
+    claim_idempotency_slot() handles expiry lazily on read, but that only
+    removes individual rows when they happen to be re-used. Without a
+    periodic sweep, slots for one-shot requests (the vast majority) never
+    get cleaned up and the table grows unboundedly.
+
+    We add a 48-hour buffer beyond expires_at before deleting so that any
+    in-flight debugging or replay window is preserved after expiry.
+    """
+    cutoff = timezone.now() - timedelta(hours=48)
+    deleted_count, _ = IdempotencyKey.objects.filter(expires_at__lt=cutoff).delete()
+    logger.info("purge_expired_idempotency_slots: deleted %s expired slots.", deleted_count)
+    return {"deleted": deleted_count}

@@ -39,3 +39,15 @@ export async function createPayout({ amount_paise, bank_account_id }) {
   const data = await res.json();
   return { data, status: res.status };
 }
+
+export async function retryPayout(payoutId) {
+  const res = await fetch(`/api/v1/payouts/${payoutId}/retry/`, {
+    method: "POST",
+    headers: {
+      ...DEFAULT_HEADERS,
+      "X-Operator-Override": "true",
+    },
+  });
+  const data = await res.json();
+  return { data, status: res.status };
+}

@@ -40,6 +40,23 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f"Merchant already exists: {merchant.name} (id={merchant.pk})")
 
+            # Idempotency guard: only seed balance if no CREDIT entry exists yet.
+            # Running seed twice in dev should not double the balance — that would
+            # make all subsequent test runs start from a different state.
+            already_seeded = LedgerEntry.objects.filter(
+                merchant=merchant,
+                entry_type=LedgerEntry.EntryType.CREDIT,
+            ).exists()
+
+            if already_seeded:
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"Credit already seeded for {merchant.name} — skipping. "
+                        f"Use the admin or a manual LedgerEntry to add more funds."
+                    )
+                )
+                return
+
             LedgerEntry.objects.create(
                 merchant=merchant,
                 entry_type=LedgerEntry.EntryType.CREDIT,

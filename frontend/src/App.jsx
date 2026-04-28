@@ -74,7 +74,7 @@ export default function App() {
             <PayoutForm onSuccess={refresh} />
           </div>
           <div className="lg:col-span-2">
-            <PayoutHistory payouts={payouts} />
+            <PayoutHistory payouts={payouts} onSuccess={refresh} />
           </div>
         </div>
 
